@@ -1,7 +1,7 @@
 import graphene
 from graphene_django import DjangoObjectType
 
-from .models import Link
+from .models import Link, Vote
 from users.schema import UserType
 
 
@@ -10,11 +10,20 @@ class LinkType(DjangoObjectType):
         model = Link
 
 
+class VoteType(DjangoObjectType):
+    class Meta:
+        model = Vote
+
+
 class Query(graphene.ObjectType):
     links = graphene.List(LinkType)
+    votes = graphene.List(VoteType)
 
     def resolve_links(self, info, **kwargs):
         return Link.objects.all()
+
+    def resolve_votes(self, info, *args, **kwargs):
+        return Vote.objects.all()
 
 
 class CreateLink(graphene.Mutation):
@@ -41,5 +50,27 @@ class CreateLink(graphene.Mutation):
         )
 
 
+class CreateVote(graphene.Mutation):
+    link = graphene.Field(LinkType)
+    user = graphene.Field(UserType)
+
+    class Arguments:
+        link_id = graphene.Int()
+
+    def mutate(self, info, link_id):
+        user = info.context.user
+        if user.is_anonymous:
+            raise Exception('You must be logged in to vote!')
+
+        link = Link.objects.filter(id=link_id).first()
+        if not link:
+            raise Exception('Invalid link!')
+
+        Vote.objects.create(link=link, user=user)
+
+        return CreateVote(link=link, user=user)
+
+
 class Mutation(graphene.ObjectType):
     create_link = CreateLink.Field()
+    create_vote = CreateVote.Field()
